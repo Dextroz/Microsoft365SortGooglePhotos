@@ -14,11 +14,14 @@
 .PARAMETER OneDriveDirectory
     The PATH on the system to create the OneDrive directory structure containing the Google Photos data export photos and videos.
 
+.PARAMETER Cleanup
+    Delete the ExtractDirectory once finished.
+
 .EXAMPLE
     Main.ps1 -ExportZip "takeout.zip" -ExtractDirectory "GooglePhotos" -OneDriveDirectory "OneDrivePhotos" -Verbose
 
 .EXAMPLE
-    Main.ps1 -ExportZip "takeout.zip" -ExtractDirectory "GooglePhotos" -OneDriveDirectory "OneDrivePhotos"
+    Main.ps1 -ExportZip "takeout.zip" -ExtractDirectory "GooglePhotos" -OneDriveDirectory "OneDrivePhotos" -Cleanup
 
 .NOTES
     Ensure your Google Photos data export does **NOT** contains albums.
@@ -50,7 +53,11 @@ param (
     [Parameter(Mandatory = $true)]
     [String]
     [ValidateNotNullOrEmpty()]
-    $OneDriveDirectory
+    $OneDriveDirectory,
+
+    [Parameter]
+    [Switch]
+    $Cleanup
 )
 $Version = "0.0.1"
 # Begin logging
@@ -144,6 +151,18 @@ foreach ($DateDir in $DateDirs) {
     $PhotosAndVideos | ForEach-Object -Process { 
         Write-Verbose -Message "Copying item: $($_.FullName) to directory: $DirectoryFullDate."
         Copy-Item -Path $_.FullName -Destination $DirectoryFullDate -Force -Verbose:($PSBoundParameters["Verbose"] -eq $true) -ErrorAction "Stop" }
+}
+
+if ($Cleanup) {
+    Write-Output -InputObject "Cleaning up..."
+    try {
+        Write-Verbose -Message "Attempting to recursively cleanup (delete) directory: $ExtractDirectory."
+        Remove-Item -Path $ExtractDirectory -Recurse -Force -Verbose:($PSBoundParameters["Verbose"] -eq $true) -ErrorAction "Stop"
+    }
+    catch {
+        Write-Error -Message "Failed to cleanup (delete) directory: $($ExtractDirectory): $($_.Exception.Message)."
+        break
+    }
 }
 
 # End logging
