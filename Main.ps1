@@ -1,32 +1,56 @@
 <#
 .SYNOPSIS
-    A script to sort Google Photos takeout export data.
+    Sorts a Google Photos data export from takeout.google.com for Microsoft OneDrive.
 
 .DESCRIPTION
-    A script to sort Google Photos export data into the directory file structure created by OneDrive when auto uploading images and videos.
+    A script to sort a Google Photos data export from takeout.google.com into the directory file structure created by OneDrive when auto uploading images and videos.
 
 .PARAMETER ExportZip
-    The PATH on the machine to the Google Photos takeout ZIP file.
+    The PATH on the machine to the Google Photos data export ZIP file.
 
 .PARAMETER ExtractDirectory
-    The PATH on the system to extract the Google Photos takeout ZIP file.
+    The PATH on the system to extract the Google Photos data export ZIP file.
+
+.PARAMETER OneDriveDirectory
+    The PATH on the system to create the OneDrive directory structure containing the Google Photos data export photos and videos.
 
 .EXAMPLE
-    Main.ps1 -ExportZip "takeout.zip" -ExtractDirectory "onedrivephotos" -Verbose
+    Main.ps1 -ExportZip "takeout.zip" -ExtractDirectory "GooglePhotos" -OneDriveDirectory "OneDrivePhotos" -Verbose
+
+.EXAMPLE
+    Main.ps1 -ExportZip "takeout.zip" -ExtractDirectory "GooglePhotos" -OneDriveDirectory "OneDrivePhotos"
 
 .NOTES
-    Ensure your Google Photos takeout export doesn't contains albums.
-    You don't need to export them as the photos and videos in the albums are included in their respective year-month-day directory.
+    Ensure your Google Photos data export does **NOT** contains albums.
+    You don't need to export albums as the photos and videos in them are also included in their respective year-month-day directory within the export.
 #>
 [CmdletBinding()]
 param (
     [Parameter(Mandatory = $true)]
     [String]
+    [ValidateScript({
+        # Check parameter provided is a file
+        if (-not (Test-Path -Path $_ -PathType "Leaf")) {
+            Write-Error -Message "Provided parameter: $_ is not a file." -ErrorAction "Stop"
+        }
+        # Check provided file ends with .zip extension
+        if ($_ -notlike "*.zip") {
+            Write-Error -Message "Provided parameter: $_ is not a zip file." -ErrorAction "Stop"
+        }
+        return $true
+    })]
+    [ValidateNotNullOrEmpty()]
     $ExportZip,
 
     [Parameter(Mandatory = $true)]
     [String]
-    $ExtractDirectory
+    [ValidateNotNullOrEmpty()]
+    $ExtractDirectory,
+
+    [Parameter(Mandatory = $true)]
+    [String]
+    [ValidateNotNullOrEmpty()]
+    $OneDriveDirectory
 )
 $Version = "0.0.1"
 # Begin logging
@@ -49,14 +73,15 @@ catch {
     break
 }
 # Collect directory names
+Write-Output -InputObject "Collecting directory names to create OneDrive directory structure."
 try {
-    Write-Verbose -Message "Collecting directory names."
     # The directory containing the Year-Month-Day directories containing photos
     $MainDirectory = "$ExtractDirectory/Takeout/Google Photos"
+    Write-Verbose -Message "Collecting directory names from directory: $MainDirectory."
     $DateDirs = Get-ChildItem -Path $MainDirectory -Directory -Verbose:($PSBoundParameters["Verbose"] -eq $true) -ErrorAction "Stop"
 }
 catch {
-    Write-Error -Message "Failed to obtain directories in path:  $($_.Exception.Message)."
+    Write-Error -Message "Failed to obtain directories in path: $($MainDirectory): $($_.Exception.Message)."
     break
 }
 
@@ -70,14 +95,15 @@ Pictures
 			xx
 			12
 #>
-# Create directory structure for Onedrive
-$OneDriveTopLevelDirectory = "$MainDirectory/Pictures/Camera Roll"
+# Create directory structure for OneDrive
+$OneDriveTopLevelDirectory = "$OneDriveDirectory/Pictures/Camera Roll"
+Write-Output -InputObject "Creating required OneDrive top level directories in path: $OneDriveTopLevelDirectory."
 try {
     Write-Verbose -Message "Attempting to create top level directory structure for OneDrive."
     New-Item -Path $OneDriveTopLevelDirectory -ItemType "Directory" -Verbose:($PSBoundParameters["Verbose"] -eq $true) -ErrorAction "Stop"
 }
 catch {
-    Write-Error -Message "Failed to create top level directory structure for OneDrive with path: $($MainDirectory): $($_.Exception.Message)."
+    Write-Error -Message "Failed to create top level directory structure for OneDrive with path: $($OneDriveTopLevelDirectory): $($_.Exception.Message)."
     break
 }
 # Iterate over directories in Google Photos export. Move them into the appropriate directory based on year and month
@@ -105,9 +131,16 @@ foreach ($DateDir in $DateDirs) {
         Write-Verbose -Message "Directory: $DirectoryFullDate already exists."
     }
     # Obtain all photos and video in the directory
-    Write-Verbose -Message "Attempting to obtain all photos and videos in directory: $($DateDir.Name)."
-    $PhotosAndVideos = $DateDir | Get-ChildItem -Exclude "*.json" -Verbose:($PSBoundParameters["Verbose"] -eq $true) -ErrorAction "Stop"
+    try {
+        Write-Verbose -Message "Attempting to obtain all photos and videos in directory: $($DateDir.Name)."
+        $PhotosAndVideos = $DateDir | Get-ChildItem -Exclude "*.json" -Verbose:($PSBoundParameters["Verbose"] -eq $true) -ErrorAction "Stop"
+    }
+    catch {
+        Write-Error -Message "Failed to obtain all photos and videos in directory: $($DateDir.Name): $($_.Exception.Message)."
+        break
+    }
     # For every photo and video retrieved, copy them to the correct directory
+    Write-Output -InputObject "Copying photos and videos from directory: $($DateDir.Name) to directory: $DirectoryFullDate."
     $PhotosAndVideos | ForEach-Object -Process { 
         Write-Verbose -Message "Copying item: $($_.FullName) to directory: $DirectoryFullDate."
         Copy-Item -Path $_.FullName -Destination $DirectoryFullDate -Force -Verbose:($PSBoundParameters["Verbose"] -eq $true) -ErrorAction "Stop" }
