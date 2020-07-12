@@ -46,7 +46,7 @@ By all means, check for yourself ;-) If this has changed, submit an issue :-)
 
 ## Authors -- Contributors
 
-* **Dextroz** - *Author* - [Dextroz](https://github.com/Dextroz)
+* **dbrennand** - *Author* - [dbrennand](https://github.com/dbrennand)
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) for details.
